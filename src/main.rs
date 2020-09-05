@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 use std::io::{stdin, stdout, Write};
+use std::collections::HashMap;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
@@ -30,14 +31,14 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let mut clock = WallClock::new(config.sample_rate.0);
     let num_channels = config.channels as usize;
 
-    let note = Arc::new(Mutex::new(None));
-    let stream_note = note.clone();
+    let notes = Arc::new(Mutex::new(HashMap::new()));
+    let stream_notes = notes.clone();
 
     let stream = device
         .build_output_stream(
             &config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                write_samples(data, num_channels, &mut clock, stream_note.clone());
+                write_samples(data, num_channels, &mut clock, stream_notes.clone());
             },
             err_fn,
         )
@@ -48,7 +49,7 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let mut stdout = stdout().into_raw_mode().unwrap();
     writeln!(stdout, "Begin playing!{}", termion::cursor::Hide).unwrap();
 
-    let mut mapping = std::collections::HashMap::new();
+    let mut mapping = HashMap::new();
     mapping.insert('z', 0); // A3
     mapping.insert('s', 1);
     mapping.insert('x', 2);
@@ -76,9 +77,9 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
                 }
                 Key::Char(c) => {
                     if let Some(semitone) = mapping.get(&c) {
-                        let mut n = note.lock().unwrap();
+                        let mut ns = notes.lock().unwrap();
                         let freq = get_freq(*semitone, 220.0);
-                        *n = Some(Note::new(freq, 0.3));
+                        ns.insert(c, Note::new(freq, 0.3));
                     }
                 },
                 _ => (),
@@ -87,11 +88,14 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     }
 }
 
-fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut WallClock, note: Arc<Mutex<Option<Note>>>) {
+fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut WallClock, notes: Arc<Mutex<HashMap<char, Note>>>) {
 
     for channel in data.chunks_mut(num_channels) {
-        let result = 0.3 * note.lock().unwrap().as_mut()
-            .map_or(0.0, |ref mut n| n.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0));
+        let mut result = 0.0;
+
+        for (_, note) in notes.lock().unwrap().iter_mut() {
+            result += 0.3 * note.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0);
+        }
 
         for sample in channel.iter_mut() {
             *sample = Sample::from(&result);
