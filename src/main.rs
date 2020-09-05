@@ -89,12 +89,11 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 }
 
 fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut WallClock, notes: Arc<Mutex<HashMap<char, Note>>>) {
-
     for channel in data.chunks_mut(num_channels) {
         let mut result = 0.0;
 
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.3 * note.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0);
+            result += 0.1 * note.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0);
         }
 
         for sample in channel.iter_mut() {
@@ -115,6 +114,11 @@ fn square(freq: f32, t: f32) -> f32 {
     } else {
         -1.0
     }
+}
+
+fn sawtooth(freq: f32, t: f32) -> f32 {
+    let period = 1.0 / freq;
+    2.0 * (t / period - (0.5 + t / period).floor())
 }
 
 fn get_freq(semitone: u32, root_freq: f32) -> f32 {
@@ -163,7 +167,7 @@ impl Note {
     fn sample(&mut self, t: f32, sample_duration: f32) -> Option<f32> {
         if self.time_remaining > 0.0 {
             self.time_remaining -= sample_duration;
-            Some(square(self.freq, t))
+            Some(sawtooth(self.freq, t))
         } else {
             None
         }
