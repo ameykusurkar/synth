@@ -78,7 +78,7 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
                     if let Some(semitone) = mapping.get(&c) {
                         let mut n = note.lock().unwrap();
                         let freq = get_freq(*semitone, 220.0);
-                        *n = Some(Note(freq));
+                        *n = Some(Note::new(freq, 0.3));
                     }
                 },
                 _ => (),
@@ -90,7 +90,8 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut WallClock, note: Arc<Mutex<Option<Note>>>) {
 
     for channel in data.chunks_mut(num_channels) {
-        let result = 0.3 * note.lock().unwrap().as_ref().map_or(0.0, |n| n.sample(clock.time()));
+        let result = 0.3 * note.lock().unwrap().as_mut()
+            .map_or(0.0, |ref mut n| n.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0));
 
         for sample in channel.iter_mut() {
             *sample = Sample::from(&result);
@@ -142,10 +143,25 @@ impl WallClock {
     }
 }
 
-struct Note(f32);
+struct Note {
+    freq: f32,
+    time_remaining: f32,
+}
 
 impl Note {
-    fn sample(&self, t: f32) -> f32 {
-        square(self.0, t)
+    fn new(freq: f32, duration: f32) -> Self {
+        Self {
+            freq,
+            time_remaining: duration,
+        }
+    }
+
+    fn sample(&mut self, t: f32, sample_duration: f32) -> Option<f32> {
+        if self.time_remaining > 0.0 {
+            self.time_remaining -= sample_duration;
+            Some(square(self.freq, t))
+        } else {
+            None
+        }
     }
 }
