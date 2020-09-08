@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
-use std::io::{stdin, stdout, Write};
 use std::collections::HashMap;
+use std::io::{stdin, stdout, Write};
+use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
@@ -49,23 +49,7 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let mut stdout = stdout().into_raw_mode().unwrap();
     writeln!(stdout, "Begin playing!{}", termion::cursor::Hide).unwrap();
 
-    let mut mapping = HashMap::new();
-    mapping.insert('z', 0); // A3
-    mapping.insert('s', 1);
-    mapping.insert('x', 2);
-    mapping.insert('c', 3); // Middle C
-    mapping.insert('f', 4);
-    mapping.insert('v', 5);
-    mapping.insert('g', 6);
-    mapping.insert('b', 7);
-    mapping.insert('n', 8);
-    mapping.insert('j', 9);
-    mapping.insert('m', 10);
-    mapping.insert('k', 11);
-    mapping.insert(',', 12); // A4
-    mapping.insert('l', 13);
-    mapping.insert('.', 14);
-    mapping.insert('/', 15);
+    let mapping = build_keyboard();
 
     'outer: loop {
         for c in stdin().keys() {
@@ -76,24 +60,30 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
                     break 'outer;
                 }
                 Key::Char(c) => {
-                    if let Some(semitone) = mapping.get(&c) {
-                        let mut ns = notes.lock().unwrap();
-                        let freq = get_freq(*semitone, 220.0);
-                        ns.insert(c, Note::new(freq, 0.3));
+                    if let Some(freq) = mapping.get(&c) {
+                        notes.lock().unwrap().insert(c, Note::new(*freq, 0.3));
                     }
-                },
+                }
                 _ => (),
             }
         }
     }
 }
 
-fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut WallClock, notes: Arc<Mutex<HashMap<char, Note>>>) {
+fn write_samples<T: Sample>(
+    data: &mut [T],
+    num_channels: usize,
+    clock: &mut WallClock,
+    notes: Arc<Mutex<HashMap<char, Note>>>,
+) {
     for channel in data.chunks_mut(num_channels) {
         let mut result = 0.0;
 
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.1 * note.sample(clock.time(), 1.0 / clock.sample_rate).unwrap_or(0.0);
+            result += 0.1
+                * note
+                    .sample(clock.time(), 1.0 / clock.sample_rate)
+                    .unwrap_or(0.0);
         }
 
         for sample in channel.iter_mut() {
@@ -102,6 +92,30 @@ fn write_samples<T: Sample>(data: &mut [T], num_channels: usize, clock: &mut Wal
 
         clock.clock();
     }
+}
+
+fn build_keyboard() -> HashMap<char, f32> {
+    let root_freq = 220.0;
+    let mut mapping = HashMap::new();
+
+    mapping.insert('z', get_freq(0, root_freq)); // A3
+    mapping.insert('s', get_freq(1, root_freq));
+    mapping.insert('x', get_freq(2, root_freq));
+    mapping.insert('c', get_freq(3, root_freq)); // Middle C
+    mapping.insert('f', get_freq(4, root_freq));
+    mapping.insert('v', get_freq(5, root_freq));
+    mapping.insert('g', get_freq(6, root_freq));
+    mapping.insert('b', get_freq(7, root_freq));
+    mapping.insert('n', get_freq(8, root_freq));
+    mapping.insert('j', get_freq(9, root_freq));
+    mapping.insert('m', get_freq(10, root_freq));
+    mapping.insert('k', get_freq(11, root_freq));
+    mapping.insert(',', get_freq(12, root_freq)); // A4
+    mapping.insert('l', get_freq(13, root_freq));
+    mapping.insert('.', get_freq(14, root_freq));
+    mapping.insert('/', get_freq(15, root_freq));
+
+    mapping
 }
 
 fn sin(freq: f32, t: f32) -> f32 {
