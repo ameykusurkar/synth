@@ -46,10 +46,10 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 
     stream.play().unwrap();
 
-    let mut stdout = stdout().into_raw_mode().unwrap();
-    writeln!(stdout, "Begin playing!{}", termion::cursor::Hide).unwrap();
-
     let mapping = build_keyboard();
+
+    let mut stdout = stdout().into_raw_mode().unwrap();
+    writeln!(stdout, "{:?}{}", config, termion::cursor::Hide).unwrap();
 
     'outer: loop {
         for c in stdin().keys() {
