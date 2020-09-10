@@ -34,17 +34,23 @@ fn main() {
 fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
 
-    let mut clock = WallClock::new(config.sample_rate.0);
+    let clock = Arc::new(Mutex::new(WallClock::new(config.sample_rate.0)));
     let num_channels = config.channels as usize;
 
     let notes = Arc::new(Mutex::new(HashMap::new()));
     let stream_notes = notes.clone();
+    let stream_clock = clock.clone();
 
     let stream = device
         .build_output_stream(
             &config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                write_samples(data, num_channels, &mut clock, stream_notes.clone());
+                write_samples(
+                    data,
+                    num_channels,
+                    stream_clock.clone(),
+                    stream_notes.clone(),
+                );
             },
             err_fn,
         )
@@ -53,7 +59,9 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     stream.play().unwrap();
 
     let launcher = AppLauncher::with_window(WindowDesc::new(build_ui));
-    launcher.launch(KeyboardState::new(notes.clone())).unwrap();
+    launcher
+        .launch(KeyboardState::new(notes.clone(), clock.clone()))
+        .unwrap();
 }
 
 fn build_ui() -> Keyboard {
@@ -63,17 +71,15 @@ fn build_ui() -> Keyboard {
 fn write_samples<T: Sample>(
     data: &mut [T],
     num_channels: usize,
-    clock: &mut WallClock,
+    clock: Arc<Mutex<WallClock>>,
     notes: Arc<Mutex<HashMap<char, Note>>>,
 ) {
     for channel in data.chunks_mut(num_channels) {
+        let mut clock = clock.lock().unwrap();
         let mut result = 0.0;
 
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.1
-                * note
-                    .sample(clock.time(), 1.0 / clock.sample_rate)
-                    .unwrap_or(0.0);
+            result += 0.1 * note.sample(clock.time()).unwrap_or(0.0);
         }
 
         for sample in channel.iter_mut() {
@@ -157,24 +163,25 @@ impl WallClock {
 
 struct Note {
     freq: f32,
-    time_remaining: f32,
+    play_until: f32,
+    completed: bool,
 }
 
 impl Note {
-    fn new(freq: f32, duration: f32) -> Self {
+    fn new(freq: f32, play_until: f32) -> Self {
         Self {
             freq,
-            time_remaining: duration,
+            play_until,
+            completed: false,
         }
     }
 
     fn complete(&mut self) {
-        self.time_remaining = 0.0;
+        self.completed = true;
     }
 
-    fn sample(&mut self, t: f32, sample_duration: f32) -> Option<f32> {
-        if self.time_remaining > 0.0 {
-            self.time_remaining -= sample_duration;
+    fn sample(&mut self, t: f32) -> Option<f32> {
+        if !self.completed && t < self.play_until {
             Some(sawtooth(self.freq, t))
         } else {
             None
@@ -187,11 +194,12 @@ struct Keyboard;
 #[derive(Clone, Data)]
 struct KeyboardState {
     notes: Arc<Mutex<HashMap<char, Note>>>,
+    clock: Arc<Mutex<WallClock>>,
 }
 
 impl KeyboardState {
-    fn new(notes: Arc<Mutex<HashMap<char, Note>>>) -> Self {
-        Self { notes }
+    fn new(notes: Arc<Mutex<HashMap<char, Note>>>, clock: Arc<Mutex<WallClock>>) -> Self {
+        Self { notes, clock }
     }
 }
 
@@ -209,10 +217,11 @@ impl Widget<KeyboardState> for Keyboard {
                         .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
                     if let Some(freq) = KEY_MAPPING.get(&key) {
+                        let t = data.clock.lock().unwrap().time();
                         data.notes
                             .lock()
                             .unwrap()
-                            .insert(key, Note::new(*freq, 2.0));
+                            .insert(key, Note::new(*freq, t + 2.0));
                     }
                 }
             }
