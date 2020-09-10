@@ -1,14 +1,19 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use lazy_static::lazy_static;
+
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
 
 use druid::{
-    AppLauncher, WindowDesc, Widget, PlatformError,
-    LifeCycle, LifeCycleCtx, Env, Event, EventCtx,
-    UpdateCtx, PaintCtx, LayoutCtx, BoxConstraints, Size, Data
+    AppLauncher, BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx,
+    PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
 };
+
+lazy_static! {
+    static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
+}
 
 fn main() {
     let host = cpal::default_host();
@@ -46,8 +51,6 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
         .expect("could not build stream");
 
     stream.play().unwrap();
-
-    let mapping = build_keyboard();
 
     let launcher = AppLauncher::with_window(WindowDesc::new(build_ui));
     launcher.launch(KeyboardState::new(notes.clone())).unwrap();
@@ -196,29 +199,51 @@ impl Widget<KeyboardState> for Keyboard {
                 ctx.request_focus();
             }
             Event::KeyDown(k) => {
-                // if let Some(freq) = mapping.get(&c) {
-                //     notes.lock().unwrap().insert(c, Note::new(*freq, 0.3));
-                // }
-                let freq = 440.0;
-                let key = k.unmod_text().map_or(' ', |s| s.chars().next().unwrap_or(' '));
-                println!("{}, {}", key, freq);
-                data.notes.lock().unwrap().insert(key, Note::new(freq, 0.3));
+                let key = k
+                    .unmod_text()
+                    .map_or(' ', |s| s.chars().next().unwrap_or(' '));
+
+                if let Some(freq) = KEY_MAPPING.get(&key) {
+                    data.notes
+                        .lock()
+                        .unwrap()
+                        .insert(key, Note::new(*freq, 0.3));
+                }
             }
-            // Event::KeyUp(k) => {
-            //     println!("Up {:?}", k);
-            // }
-            // e => println!("Event {:?}", e),
+            Event::KeyUp(_k) => {
+                // TODO: Volume envelope
+            }
             _ => (),
         }
     }
 
-    fn lifecycle(&mut self, _ctx: &mut LifeCycleCtx, _event: &LifeCycle, _data: &KeyboardState, _: &Env) {}
+    fn lifecycle(
+        &mut self,
+        _ctx: &mut LifeCycleCtx,
+        _event: &LifeCycle,
+        _data: &KeyboardState,
+        _: &Env,
+    ) {
+    }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &KeyboardState, data: &KeyboardState, _: &Env) {}
+    fn update(
+        &mut self,
+        _ctx: &mut UpdateCtx,
+        _old_data: &KeyboardState,
+        _data: &KeyboardState,
+        _: &Env,
+    ) {
+    }
 
-    fn layout(&mut self, _: &mut LayoutCtx, bc: &BoxConstraints, _: &KeyboardState, _: &Env) -> Size {
+    fn layout(
+        &mut self,
+        _: &mut LayoutCtx,
+        bc: &BoxConstraints,
+        _: &KeyboardState,
+        _: &Env,
+    ) -> Size {
         bc.max()
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &KeyboardState, _env: &Env) {}
+    fn paint(&mut self, _ctx: &mut PaintCtx, _data: &KeyboardState, _env: &Env) {}
 }
