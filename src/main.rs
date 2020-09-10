@@ -168,6 +168,10 @@ impl Note {
         }
     }
 
+    fn complete(&mut self) {
+        self.time_remaining = 0.0;
+    }
+
     fn sample(&mut self, t: f32, sample_duration: f32) -> Option<f32> {
         if self.time_remaining > 0.0 {
             self.time_remaining -= sample_duration;
@@ -207,11 +211,15 @@ impl Widget<KeyboardState> for Keyboard {
                     data.notes
                         .lock()
                         .unwrap()
-                        .insert(key, Note::new(*freq, 0.3));
+                        .insert(key, Note::new(*freq, 2.0));
                 }
             }
-            Event::KeyUp(_k) => {
-                // TODO: Volume envelope
+            Event::KeyUp(k) => {
+                let key = k
+                    .unmod_text()
+                    .map_or(' ', |s| s.chars().next().unwrap_or(' '));
+
+                data.notes.lock().unwrap().get_mut(&key).map(Note::complete);
             }
             _ => (),
         }
