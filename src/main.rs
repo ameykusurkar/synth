@@ -1,13 +1,19 @@
 use std::collections::HashMap;
-use std::io::{stdin, stdout, Write};
 use std::sync::{Arc, Mutex};
+
+use lazy_static::lazy_static;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
 
-use termion::event::Key;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
+use druid::{
+    AppLauncher, BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx,
+    PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
+};
+
+lazy_static! {
+    static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
+}
 
 fn main() {
     let host = cpal::default_host();
@@ -46,28 +52,12 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 
     stream.play().unwrap();
 
-    let mapping = build_keyboard();
+    let launcher = AppLauncher::with_window(WindowDesc::new(build_ui));
+    launcher.launch(KeyboardState::new(notes.clone())).unwrap();
+}
 
-    let mut stdout = stdout().into_raw_mode().unwrap();
-    writeln!(stdout, "{:?}{}", config, termion::cursor::Hide).unwrap();
-
-    'outer: loop {
-        for c in stdin().keys() {
-            match c.unwrap() {
-                Key::Char('q') => {
-                    // Restore cursor state before exiting
-                    write!(stdout, "{}", termion::cursor::Show).unwrap();
-                    break 'outer;
-                }
-                Key::Char(c) => {
-                    if let Some(freq) = mapping.get(&c) {
-                        notes.lock().unwrap().insert(c, Note::new(*freq, 0.3));
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
+fn build_ui() -> Keyboard {
+    Keyboard
 }
 
 fn write_samples<T: Sample>(
@@ -186,4 +176,74 @@ impl Note {
             None
         }
     }
+}
+
+struct Keyboard;
+
+#[derive(Clone, Data)]
+struct KeyboardState {
+    notes: Arc<Mutex<HashMap<char, Note>>>,
+}
+
+impl KeyboardState {
+    fn new(notes: Arc<Mutex<HashMap<char, Note>>>) -> Self {
+        Self { notes }
+    }
+}
+
+impl Widget<KeyboardState> for Keyboard {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut KeyboardState, _env: &Env) {
+        match event {
+            Event::WindowConnected => {
+                // This is the only widget, so it should handle all keyboard events
+                ctx.request_focus();
+            }
+            Event::KeyDown(k) => {
+                let key = k
+                    .unmod_text()
+                    .map_or(' ', |s| s.chars().next().unwrap_or(' '));
+
+                if let Some(freq) = KEY_MAPPING.get(&key) {
+                    data.notes
+                        .lock()
+                        .unwrap()
+                        .insert(key, Note::new(*freq, 0.3));
+                }
+            }
+            Event::KeyUp(_k) => {
+                // TODO: Volume envelope
+            }
+            _ => (),
+        }
+    }
+
+    fn lifecycle(
+        &mut self,
+        _ctx: &mut LifeCycleCtx,
+        _event: &LifeCycle,
+        _data: &KeyboardState,
+        _: &Env,
+    ) {
+    }
+
+    fn update(
+        &mut self,
+        _ctx: &mut UpdateCtx,
+        _old_data: &KeyboardState,
+        _data: &KeyboardState,
+        _: &Env,
+    ) {
+    }
+
+    fn layout(
+        &mut self,
+        _: &mut LayoutCtx,
+        bc: &BoxConstraints,
+        _: &KeyboardState,
+        _: &Env,
+    ) -> Size {
+        bc.max()
+    }
+
+    fn paint(&mut self, _ctx: &mut PaintCtx, _data: &KeyboardState, _env: &Env) {}
 }
