@@ -203,15 +203,17 @@ impl Widget<KeyboardState> for Keyboard {
                 ctx.request_focus();
             }
             Event::KeyDown(k) => {
-                let key = k
-                    .unmod_text()
-                    .map_or(' ', |s| s.chars().next().unwrap_or(' '));
+                if !k.is_repeat {
+                    let key = k
+                        .unmod_text()
+                        .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
-                if let Some(freq) = KEY_MAPPING.get(&key) {
-                    data.notes
-                        .lock()
-                        .unwrap()
-                        .insert(key, Note::new(*freq, 2.0));
+                    if let Some(freq) = KEY_MAPPING.get(&key) {
+                        data.notes
+                            .lock()
+                            .unwrap()
+                            .insert(key, Note::new(*freq, 2.0));
+                    }
                 }
             }
             Event::KeyUp(k) => {
