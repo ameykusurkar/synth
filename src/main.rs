@@ -11,6 +11,11 @@ use druid::{
     PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
 };
 
+use crate::note::Note;
+
+mod note;
+mod envelope;
+
 lazy_static! {
     static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
 }
@@ -79,7 +84,7 @@ fn write_samples<T: Sample>(
         let mut result = 0.0;
 
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.1 * note.sample(clock.time()).unwrap_or(0.0);
+            result += 0.1 * note.sample(clock.time());
         }
 
         for sample in channel.iter_mut() {
@@ -114,23 +119,6 @@ fn build_keyboard() -> HashMap<char, f32> {
     mapping
 }
 
-fn sin(freq: f32, t: f32) -> f32 {
-    (2.0 * 3.14159 * freq * t).sin()
-}
-
-fn square(freq: f32, t: f32) -> f32 {
-    if (2.0 * 3.14159 * freq * t).sin() > 0.0 {
-        1.0
-    } else {
-        -1.0
-    }
-}
-
-fn sawtooth(freq: f32, t: f32) -> f32 {
-    let period = 1.0 / freq;
-    2.0 * (t / period - (0.5 + t / period).floor())
-}
-
 fn get_freq(semitone: u32, root_freq: f32) -> f32 {
     root_freq * twelfth_root(2.0).powf(semitone as f32)
 }
@@ -158,34 +146,6 @@ impl WallClock {
 
     fn time(&self) -> f32 {
         self.last_sample_time
-    }
-}
-
-struct Note {
-    freq: f32,
-    play_until: f32,
-    completed: bool,
-}
-
-impl Note {
-    fn new(freq: f32, play_until: f32) -> Self {
-        Self {
-            freq,
-            play_until,
-            completed: false,
-        }
-    }
-
-    fn complete(&mut self) {
-        self.completed = true;
-    }
-
-    fn sample(&mut self, t: f32) -> Option<f32> {
-        if !self.completed && t < self.play_until {
-            Some(sawtooth(self.freq, t))
-        } else {
-            None
-        }
     }
 }
 
@@ -221,7 +181,7 @@ impl Widget<KeyboardState> for Keyboard {
                         data.notes
                             .lock()
                             .unwrap()
-                            .insert(key, Note::new(*freq, t + 2.0));
+                            .insert(key, Note::new(*freq, t));
                     }
                 }
             }
@@ -230,7 +190,8 @@ impl Widget<KeyboardState> for Keyboard {
                     .unmod_text()
                     .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
-                data.notes.lock().unwrap().get_mut(&key).map(Note::complete);
+                let t = data.clock.lock().unwrap().time();
+                data.notes.lock().unwrap().get_mut(&key).map(|n| n.release(t));
             }
             _ => (),
         }
