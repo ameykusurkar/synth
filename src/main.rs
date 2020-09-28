@@ -11,6 +11,10 @@ use druid::{
     PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
 };
 
+use crate::note::Note;
+
+mod note;
+
 lazy_static! {
     static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
 }
@@ -114,23 +118,6 @@ fn build_keyboard() -> HashMap<char, f32> {
     mapping
 }
 
-fn sin(freq: f32, t: f32) -> f32 {
-    (2.0 * 3.14159 * freq * t).sin()
-}
-
-fn square(freq: f32, t: f32) -> f32 {
-    if (2.0 * 3.14159 * freq * t).sin() > 0.0 {
-        1.0
-    } else {
-        -1.0
-    }
-}
-
-fn sawtooth(freq: f32, t: f32) -> f32 {
-    let period = 1.0 / freq;
-    2.0 * (t / period - (0.5 + t / period).floor())
-}
-
 fn get_freq(semitone: u32, root_freq: f32) -> f32 {
     root_freq * twelfth_root(2.0).powf(semitone as f32)
 }
@@ -158,54 +145,6 @@ impl WallClock {
 
     fn time(&self) -> f32 {
         self.last_sample_time
-    }
-}
-
-struct Envelope {
-    play_until: f32,
-    released: bool,
-}
-
-impl Envelope {
-    fn new(play_until: f32) -> Self {
-        Self {
-            play_until,
-            released: false,
-        }
-    }
-
-    fn amplitude(&self, t: f32) -> Option<f32> {
-        if !self.released && t < self.play_until {
-            Some(1.0)
-        } else {
-            None
-        }
-    }
-
-    fn release(&mut self) {
-        self.released = true;
-    }
-}
-
-struct Note {
-    freq: f32,
-    envelope: Envelope,
-}
-
-impl Note {
-    fn new(freq: f32, play_until: f32) -> Self {
-        Self {
-            freq,
-            envelope: Envelope::new(play_until),
-        }
-    }
-
-    fn release(&mut self) {
-        self.envelope.release();
-    }
-
-    fn sample(&mut self, t: f32) -> Option<f32> {
-        self.envelope.amplitude(t).map(|amp| amp * sawtooth(self.freq, t))
     }
 }
 
