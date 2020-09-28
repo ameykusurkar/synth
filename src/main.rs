@@ -161,31 +161,51 @@ impl WallClock {
     }
 }
 
+struct Envelope {
+    play_until: f32,
+    released: bool,
+}
+
+impl Envelope {
+    fn new(play_until: f32) -> Self {
+        Self {
+            play_until,
+            released: false,
+        }
+    }
+
+    fn amplitude(&self, t: f32) -> Option<f32> {
+        if !self.released && t < self.play_until {
+            Some(1.0)
+        } else {
+            None
+        }
+    }
+
+    fn release(&mut self) {
+        self.released = true;
+    }
+}
+
 struct Note {
     freq: f32,
-    play_until: f32,
-    completed: bool,
+    envelope: Envelope,
 }
 
 impl Note {
     fn new(freq: f32, play_until: f32) -> Self {
         Self {
             freq,
-            play_until,
-            completed: false,
+            envelope: Envelope::new(play_until),
         }
     }
 
-    fn complete(&mut self) {
-        self.completed = true;
+    fn release(&mut self) {
+        self.envelope.release();
     }
 
     fn sample(&mut self, t: f32) -> Option<f32> {
-        if !self.completed && t < self.play_until {
-            Some(sawtooth(self.freq, t))
-        } else {
-            None
-        }
+        self.envelope.amplitude(t).map(|amp| amp * sawtooth(self.freq, t))
     }
 }
 
@@ -230,7 +250,7 @@ impl Widget<KeyboardState> for Keyboard {
                     .unmod_text()
                     .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
-                data.notes.lock().unwrap().get_mut(&key).map(Note::complete);
+                data.notes.lock().unwrap().get_mut(&key).map(Note::release);
             }
             _ => (),
         }
