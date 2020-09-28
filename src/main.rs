@@ -13,8 +13,8 @@ use druid::{
 
 use crate::note::Note;
 
-mod note;
 mod envelope;
+mod note;
 
 lazy_static! {
     static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
@@ -178,10 +178,7 @@ impl Widget<KeyboardState> for Keyboard {
 
                     if let Some(freq) = KEY_MAPPING.get(&key) {
                         let t = data.clock.lock().unwrap().time();
-                        data.notes
-                            .lock()
-                            .unwrap()
-                            .insert(key, Note::new(*freq, t));
+                        data.notes.lock().unwrap().insert(key, Note::new(*freq, t));
                     }
                 }
             }
@@ -191,7 +188,11 @@ impl Widget<KeyboardState> for Keyboard {
                     .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
                 let t = data.clock.lock().unwrap().time();
-                data.notes.lock().unwrap().get_mut(&key).map(|n| n.release(t));
+                data.notes
+                    .lock()
+                    .unwrap()
+                    .get_mut(&key)
+                    .map(|n| n.release(t));
             }
             _ => (),
         }

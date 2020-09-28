@@ -22,14 +22,14 @@ impl Envelope {
                 } else {
                     self.sustain_amplitude
                 }
-            },
+            }
             NoteState::Released(elapsed) => {
                 if elapsed < self.release_duration {
                     self.release_amplitude(elapsed)
                 } else {
                     0.0
                 }
-            },
+            }
         }
     }
 
@@ -38,7 +38,12 @@ impl Envelope {
     }
 
     fn decay_amplitude(&self, t: f32) -> f32 {
-        let grad = gradient(0.0, self.attack_amplitude, self.decay_duration, self.sustain_amplitude);
+        let grad = gradient(
+            0.0,
+            self.attack_amplitude,
+            self.decay_duration,
+            self.sustain_amplitude,
+        );
         grad * t + self.attack_amplitude
     }
 
