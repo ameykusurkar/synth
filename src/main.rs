@@ -180,7 +180,7 @@ impl Widget<KeyboardState> for Keyboard {
                         data.notes
                             .lock()
                             .unwrap()
-                            .insert(key, Note::new(*freq, t + 2.0));
+                            .insert(key, Note::new(*freq, t, 2.0, 0.1));
                     }
                 }
             }
