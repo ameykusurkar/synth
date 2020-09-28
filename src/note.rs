@@ -1,24 +1,30 @@
 use crate::envelope::Envelope;
 
 pub struct Note {
+    note_start: f32,
     freq: f32,
     envelope: Envelope,
+    released: bool,
 }
 
 impl Note {
     pub fn new(freq: f32, t: f32, duration: f32, attack_duration: f32) -> Self {
         Self {
+            note_start: t,
             freq,
-            envelope: Envelope::new(t, duration, attack_duration),
+            envelope: Envelope::new(duration, attack_duration),
+            released: false,
         }
     }
 
     pub fn release(&mut self) {
-        self.envelope.release();
+        self.released = true;
     }
 
     pub fn sample(&mut self, t: f32) -> Option<f32> {
-        self.envelope.amplitude(t).map(|amp| amp * sawtooth(self.freq, t))
+        self.envelope
+            .amplitude(t - self.note_start, self.released)
+            .map(|amp| amp * sawtooth(self.freq, t))
     }
 }
 
