@@ -84,7 +84,7 @@ fn write_samples<T: Sample>(
         let mut result = 0.0;
 
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.1 * note.sample(clock.time()).unwrap_or(0.0);
+            result += 0.1 * note.sample(clock.time());
         }
 
         for sample in channel.iter_mut() {
@@ -181,7 +181,7 @@ impl Widget<KeyboardState> for Keyboard {
                         data.notes
                             .lock()
                             .unwrap()
-                            .insert(key, Note::new(*freq, t, 2.0, 0.1));
+                            .insert(key, Note::new(*freq, t));
                     }
                 }
             }
@@ -190,7 +190,8 @@ impl Widget<KeyboardState> for Keyboard {
                     .unmod_text()
                     .map_or(' ', |s| s.chars().next().unwrap_or(' '));
 
-                data.notes.lock().unwrap().get_mut(&key).map(Note::release);
+                let t = data.clock.lock().unwrap().time();
+                data.notes.lock().unwrap().get_mut(&key).map(|n| n.release(t));
             }
             _ => (),
         }

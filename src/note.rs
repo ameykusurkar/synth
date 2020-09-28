@@ -1,31 +1,52 @@
 use crate::envelope::Envelope;
 
 pub struct Note {
-    note_start: f32,
+    start: f32,
     freq: f32,
     envelope: Envelope,
-    released: bool,
+    released_at: Option<f32>,
 }
 
 impl Note {
-    pub fn new(freq: f32, t: f32, duration: f32, attack_duration: f32) -> Self {
+    pub fn new(freq: f32, t: f32) -> Self {
+        let envelope = Envelope {
+            attack_duration: 0.1,
+            attack_amplitude: 1.0,
+            decay_duration: 0.1,
+            sustain_amplitude: 0.9,
+            release_duration: 0.2,
+        };
+
         Self {
-            note_start: t,
+            start: t,
             freq,
-            envelope: Envelope::new(duration, attack_duration),
-            released: false,
+            envelope,
+            released_at: None,
         }
     }
 
-    pub fn release(&mut self) {
-        self.released = true;
+    pub fn release(&mut self, t: f32) {
+        self.released_at = Some(t);
     }
 
-    pub fn sample(&mut self, t: f32) -> Option<f32> {
-        self.envelope
-            .amplitude(t - self.note_start, self.released)
-            .map(|amp| amp * sawtooth(self.freq, t))
+    pub fn sample(&mut self, t: f32) -> f32 {
+        let amp = self.envelope.amplitude(self.note_state(t));
+        amp * sawtooth(self.freq, t)
     }
+
+    fn note_state(&self, t: f32) -> NoteState {
+        if let Some(released_at) = self.released_at {
+            NoteState::Released(t - released_at)
+        } else {
+            NoteState::Held(t - self.start)
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum NoteState {
+    Held(f32),
+    Released(f32),
 }
 
 fn sin(freq: f32, t: f32) -> f32 {
