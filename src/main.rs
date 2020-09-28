@@ -14,6 +14,7 @@ use druid::{
 use crate::note::Note;
 
 mod note;
+mod envelope;
 
 lazy_static! {
     static ref KEY_MAPPING: HashMap<char, f32> = build_keyboard();
