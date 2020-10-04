@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
 
+use druid::widget;
 use druid::{
     AppLauncher, BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx,
     PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
@@ -69,8 +70,13 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
         .unwrap();
 }
 
-fn build_ui() -> Keyboard {
-    Keyboard
+fn build_ui() -> impl Widget<KeyboardState> {
+    widget::Flex::row().with_flex_child(
+        widget::Flex::column()
+            .with_flex_child(widget::Label::new("Synth"), 1.0)
+            .with_flex_child(Keyboard, 1.0),
+        1.0,
+    )
 }
 
 fn write_samples<T: Sample>(
