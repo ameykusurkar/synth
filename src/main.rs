@@ -12,6 +12,7 @@ use druid::{
     PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
 };
 
+use crate::envelope::Envelope;
 use crate::note::Note;
 
 mod envelope;
@@ -47,6 +48,9 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let stream_notes = notes.clone();
     let stream_clock = clock.clone();
 
+    let envelope = Arc::new(Mutex::new(ENVELOPE));
+    let stream_envelope = envelope.clone();
+
     let stream = device
         .build_output_stream(
             &config,
@@ -54,6 +58,7 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
                 write_samples(
                     data,
                     num_channels,
+                    stream_envelope.clone(),
                     stream_clock.clone(),
                     stream_notes.clone(),
                 );
@@ -66,7 +71,11 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 
     let launcher = AppLauncher::with_window(WindowDesc::new(build_ui));
     launcher
-        .launch(KeyboardState::new(notes.clone(), clock.clone()))
+        .launch(KeyboardState::new(
+            notes.clone(),
+            clock.clone(),
+            envelope.clone(),
+        ))
         .unwrap();
 }
 
@@ -82,6 +91,7 @@ fn build_ui() -> impl Widget<KeyboardState> {
 fn write_samples<T: Sample>(
     data: &mut [T],
     num_channels: usize,
+    envelope: Arc<Mutex<Envelope>>,
     clock: Arc<Mutex<WallClock>>,
     notes: Arc<Mutex<HashMap<char, Note>>>,
 ) {
@@ -89,8 +99,10 @@ fn write_samples<T: Sample>(
         let mut clock = clock.lock().unwrap();
         let mut result = 0.0;
 
+        let envelope = envelope.lock().unwrap();
+
         for (_, note) in notes.lock().unwrap().iter_mut() {
-            result += 0.1 * note.sample(clock.time());
+            result += 0.1 * note.sample(clock.time(), &envelope);
         }
 
         for sample in channel.iter_mut() {
@@ -161,13 +173,30 @@ struct Keyboard;
 struct KeyboardState {
     notes: Arc<Mutex<HashMap<char, Note>>>,
     clock: Arc<Mutex<WallClock>>,
+    envelope: Arc<Mutex<Envelope>>,
 }
 
 impl KeyboardState {
-    fn new(notes: Arc<Mutex<HashMap<char, Note>>>, clock: Arc<Mutex<WallClock>>) -> Self {
-        Self { notes, clock }
+    fn new(
+        notes: Arc<Mutex<HashMap<char, Note>>>,
+        clock: Arc<Mutex<WallClock>>,
+        envelope: Arc<Mutex<Envelope>>,
+    ) -> Self {
+        Self {
+            notes,
+            clock,
+            envelope,
+        }
     }
 }
+
+const ENVELOPE: Envelope = Envelope {
+    attack_duration: 0.1,
+    attack_amplitude: 1.0,
+    decay_duration: 0.1,
+    sustain_amplitude: 0.9,
+    release_duration: 0.2,
+};
 
 impl Widget<KeyboardState> for Keyboard {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut KeyboardState, _env: &Env) {

@@ -1,5 +1,6 @@
 use crate::note::NoteState;
 
+#[derive(Clone)]
 pub struct Envelope {
     pub attack_duration: f32,
     pub attack_amplitude: f32,
