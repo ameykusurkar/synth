@@ -6,16 +6,18 @@ use lazy_static::lazy_static;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Sample, SampleFormat, StreamConfig};
 
-use druid::widget;
+use druid::{lens, widget};
 use druid::{
-    AppLauncher, BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, LifeCycle, LifeCycleCtx,
-    PaintCtx, Size, UpdateCtx, Widget, WindowDesc,
+    AppLauncher, BoxConstraints, Data, Env, Event, EventCtx, LayoutCtx, Lens, LensExt, LifeCycle,
+    LifeCycleCtx, PaintCtx, Size, UpdateCtx, Widget, WidgetExt, WindowDesc,
 };
 
 use crate::envelope::Envelope;
+use crate::in_arc_mutex::InArcMutex;
 use crate::note::Note;
 
 mod envelope;
+mod in_arc_mutex;
 mod note;
 
 lazy_static! {
@@ -48,7 +50,7 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
     let stream_notes = notes.clone();
     let stream_clock = clock.clone();
 
-    let envelope = Arc::new(Mutex::new(ENVELOPE));
+    let envelope = Arc::new(Mutex::new(ENVELOPE.clone()));
     let stream_envelope = envelope.clone();
 
     let stream = device
@@ -80,9 +82,30 @@ fn run<T: Sample>(device: &Device, config: StreamConfig) {
 }
 
 fn build_ui() -> impl Widget<KeyboardState> {
+    let arc_envelope_lens =
+        InArcMutex::new(lens!(Envelope, attack_duration).map(|x| *x as f64, |x, y| *x = y as f32));
+
+    let lens = druid::lens::Id
+        .then(lens!(KeyboardState, envelope))
+        .then(arc_envelope_lens);
+
+    let slider = widget::Slider::new().with_range(0.0, 2.0).lens(lens);
+    let label = widget::Label::new(|data: &KeyboardState, _env: &_| {
+        format!(
+            "Attack Duration: {}",
+            data.envelope
+                .clone()
+                .as_ref()
+                .lock()
+                .unwrap()
+                .attack_duration
+        )
+    });
+
     widget::Flex::row().with_flex_child(
         widget::Flex::column()
-            .with_flex_child(widget::Label::new("Synth"), 1.0)
+            .with_flex_child(label, 1.0)
+            .with_flex_child(slider, 1.0)
             .with_flex_child(Keyboard, 1.0),
         1.0,
     )
@@ -169,7 +192,7 @@ impl WallClock {
 
 struct Keyboard;
 
-#[derive(Clone, Data)]
+#[derive(Clone, Data, Lens)]
 struct KeyboardState {
     notes: Arc<Mutex<HashMap<char, Note>>>,
     clock: Arc<Mutex<WallClock>>,
